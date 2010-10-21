@@ -1,4 +1,4 @@
-#!/usr/local/env python
+#!/usr/bin/env python
 """
 downpy.py
 
@@ -11,7 +11,9 @@ This script was made to be used along with Filebuster <http://rogeriopvl.com/fil
 """
 import urllib2
 import os, time
+import re
 from optparse import OptionParser
+from urlparse import urljoin
 
 def parsePage(url, extensions):
 		
@@ -19,13 +21,17 @@ def parsePage(url, extensions):
 	
 	links = []
 	content = soup(urllib2.urlopen(url).read())
-	
+
 	for tag in content.findAll('a', {'href': True}):
-		link = tag.attrMap['href']
+		link = tag['href']
 		# gotta love this
 		if True in [link.endswith(ex) for ex in extensions]:
 			links.append(link)
-		
+
+	for tag in content.findAll(attrs={'src': True}):
+		link = tag['src']
+		if True in [link.endswith(ex) for ex in extensions]:
+			links.append(link)
 	return links
 	
 def download(furl, folder):
@@ -40,16 +46,19 @@ def download(furl, folder):
 		exit()
 
 def parseFilename(link):
-	pieces = link.split('/')
-	return pieces[len(pieces)-1].replace("%20", " ")
+	try:
+		pieces = link.split('/')
+		return pieces[len(pieces)-1].replace("%20", " ")
+	except:
+		print "Error: parsing error for ["+ link +"]"
 
 def main():
 	"""main method: its too big... think about it"""
 	
 	# some filetypes are incomplete but this should do it for now
-	audioExtensions = ['.mp3', '.ogg', '.mp4a', '.wma', '.aac']
-	videoExtensions = ['.avi', '.mp4', '.wmv', '.flv']
-	docExtensions = ['.doc', '.docx', '.txt', '.rtf', '.pdf', '.epub', '.chm']
+	audioExtensions = ['.mp3', '.oga', '.ogg', '.mp4a', '.wma', '.aac', '.mid']
+	videoExtensions = ['.avi', '.flv', '.mp4', '.mkv', '.ogv', '.webm', '.wmv']
+	docExtensions = ['.chm', '.doc', '.docx', '.epub', '.mobi', '.odf', '.pdf', '.rtf', '.txt']
 	
 	# lets build the command line parser
 	usage = "usage: %prog [options] url"
@@ -58,6 +67,7 @@ def main():
 	
 	parser.add_option("-e", "--extension", help="Choose specific file extension. Only files with this extension will be downloaded.")
 	parser.add_option("-f", "--filetype", help="Choose a type of files to download: audio, video, doc.")
+	parser.add_option("-o", "--output", help="Choose the destination folder for your downloaded files")
 	
 	(options, args) = parser.parse_args()
 	
@@ -81,21 +91,31 @@ def main():
 			parser.error("Error: wrong filetype")
 	
 	# let the action begin
-	
-	# create a directory to place the files
-	# the directory contains a timestamp to avoid conflicts
-	folderName = "download_%d" % int(time.time())
-	os.mkdir(folderName)
+
+	# point to the output options' dir
+	if options.output:
+		try:
+			os.chdir(options.output)
+		except OSError:
+			print "Output directory doesn't exist! Saving downloads to current directory."
 	
 	print "Downloading page in %s" % args[0]
 	links = parsePage(args[0], extensions)
 	print "Done!"
 	
 	print "Page contains %d downloadable links." % len(links)
+
+	# if there are links to download, create a folder
+	if len(links) > 0:
+		# the directory contains a timestamp to avoid conflicts
+		folderName = "download_%d" % int(time.time())
+		os.mkdir(folderName)
 	
 	for link in links:
+		if not re.match('https?://.*',link):
+			link = urljoin(args[0], link)
 		print "Downloading %s" % link
-		download(args[0]+"/"+link, folderName)
+		download(link, folderName)
 	
 	print "Downpy terminated."
 
